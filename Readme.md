@@ -1,1 +1,1 @@
-this is the clone of   eCommerce project!
+that is the amazon clone
