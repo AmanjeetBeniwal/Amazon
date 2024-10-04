@@ -10,4 +10,5 @@ app.use(express.static("public"));
 app.use("/API/V1/users", registerUser);
 app.use("/API/V1/products", createProduct);
 app.use("/API/V1/carts", createCart);
+app.use("API/V1/order")
 module.exports = app;
