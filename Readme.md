@@ -1,1 +1,1 @@
-that is the amazon clone
+that is the clone  of ecommerce app!
