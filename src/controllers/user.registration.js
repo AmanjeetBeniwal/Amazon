@@ -7,8 +7,13 @@ const { uploadOnCloudinary } = require("../utils/cloudinary.js");
 // Register a new user
 const registerUser = async (req, res) => {
   const { name, email, password, phone, address, role } = req.body;
-  console.log(req.body);
-  
+
+  if (!name || !email || !password) {
+    return res
+      .status(400)
+      .json({ message: "Name, email, and password are required." });
+  }
+
   const userExists = await User.findOne({ email });
   if (userExists) {
     return res.status(400).json({ message: "User already exists" });
@@ -17,13 +22,16 @@ const registerUser = async (req, res) => {
   const verificationCode = Math.floor(
     100000 + Math.random() * 900000
   ).toString();
-  const photoLocalPath = req.file.path; //'./src/images/uCPY1x.jpg'
 
-  if (!photoLocalPath) {
-    return res.status(404).json({ message: "localPath is not found " });
+  if (!req.file || !req.file.path) {
+    return res.status(400).json({ message: "Photo is required." });
   }
+
+  const photoLocalPath = req.file.path;
   const image = await uploadOnCloudinary(photoLocalPath);
-  console.log(image.secure_urle);
+  if (!image || !image.secure_url) {
+    return res.status(500).json({ message: "Image upload failed." });
+  }
 
   const user = await User.create({
     name,
@@ -36,25 +44,22 @@ const registerUser = async (req, res) => {
     photo: image.secure_url,
   });
 
-  if (user) {
-    const token = jwt.sign(
-      { id: user._id, isVerified: user.isVerified },
-      process.env.JWT_SECRET,
-      { expiresIn: "30d" }
-    );
-    try {
-      await sendVerificationEmail(user.email, verificationCode, true); // true = verification email
-      res.status(201).json({
-        message: "User registered. Check your email to verify your account.",
-        token,
-      });
-    } catch (error) {
-      return res
-        .status(500)
-        .json({ message: "Failed to send verification email", error });
-    }
-  } else {
-    res.status(400).json({ message: "Invalid user data" });
+  const token = jwt.sign(
+    { id: user._id, isVerified: user.isVerified },
+    process.env.JWT_SECRET,
+    { expiresIn: "30d" }
+  );
+
+  try {
+    await sendVerificationEmail(user.email, verificationCode, null, "verification");
+    res.status(201).json({
+      message: "User registered. Check your email to verify your account.",
+      token,
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ message: "Failed to send verification email", error });
   }
 };
 
@@ -72,7 +77,7 @@ const requestPasswordReset = async (req, res) => {
   user.resetTokenExpiry = Date.now() + 3600000; // 1 hour expiration
   await user.save();
 
-  await sendVerificationEmail(user.email, resetToken, false);
+  await sendVerificationEmail(user.email, resetToken,null ,'passwordReset');
   return res.status(200).json({ message: "Password reset email sent" });
 };
 
@@ -185,6 +190,8 @@ const verifyEmail = async (req, res) => {
 // User login
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
+  console.log(req.body);
+  
   const user = await User.findOne({ email });
 
   if (!user) {
@@ -262,7 +269,7 @@ const UpdateUser = async (req, res) => {
     if (req.file) {
       const imageUpload = await uploadOnCloudinary(req.file.path);
       if (imageUpload && imageUpload.secure_url) {
-        updateData.photo = imageUpload.secure_url; 
+        updateData.photo = imageUpload.secure_url;
       } else {
         return res.status(500).json({ message: "Image upload failed" });
       }
@@ -272,13 +279,17 @@ const UpdateUser = async (req, res) => {
     if (phone) updateData.phone = phone;
     if (address) updateData.address = address;
 
-    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true }).select("-password");
-    
+    const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, {
+      new: true,
+    }).select("-password");
+
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json({ message: "Profile updated successfully", updatedUser });
+    res
+      .status(200)
+      .json({ message: "Profile updated successfully", updatedUser });
   } catch (error) {
     console.error("Error updating user:", error);
     res.status(500).json({ message: "Server error", error });
